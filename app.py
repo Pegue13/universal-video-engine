@@ -136,7 +136,7 @@ def import_reel(req:ReelRequest):
             "--socket-timeout","12","--retries","1","--fragment-retries","1",
             "--max-downloads","1","--max-filesize","32M","--no-progress",
             "--format","best[ext=mp4][height<=720]/best[ext=mp4]",
-            "--output",str(work/"source.%(ext)s"),"--",url],90)
+            "--output",str(work/"source.%(ext)s"),"--",url],90,accepted_exit_codes=(0,101))
         p=work/"source.mp4"
         if not p.is_file() or p.stat().st_size>engine.MAX_ASSET_BYTES:
             raise engine.EngineError("No supported, authorized public MP4 could be retrieved.")
