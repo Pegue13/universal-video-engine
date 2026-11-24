@@ -7,8 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py engine.py media_import.py selftest.py reel_smoke_test.py build_dj_sample.py ./
 RUN python -m compileall -q /app && python selftest.py
 RUN python reel_smoke_test.py
-ARG BUILD_CC_DJ_EXAMPLE=false
-RUN if [ "$BUILD_CC_DJ_EXAMPLE" = "true" ]; then python build_dj_sample.py; fi
+RUN python build_dj_sample.py
 RUN useradd --create-home --uid 10001 engine
 USER engine
 EXPOSE 10000
