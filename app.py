@@ -219,3 +219,17 @@ def dj_liek_bundle():
     p=Path("/app/examples/dj-liek-reel.zip")
     if not p.is_file(): raise HTTPException(404,"Verified example not available.")
     return FileResponse(p,media_type="application/zip",filename="DJ_Liek_Reel_CC_BY_SA_4.zip")
+
+
+@app.get("/private-preview/{token}/{filename}",include_in_schema=False)
+def private_preview(token:str,filename:str):
+    root=Path("/app/examples")
+    key=root/"henners-preview.token"
+    if not key.is_file() or len(token)>128 or not secrets.compare_digest(token,key.read_text().strip()):
+        raise HTTPException(404,"Preview not found.")
+    names={"video.mp4":("henners-preview.mp4","video/mp4"),"delivery.zip":("henners-preview.zip","application/zip")}
+    if filename not in names: raise HTTPException(404,"Preview not found.")
+    name,mime=names[filename]
+    p=root/name
+    if not p.is_file():raise HTTPException(404,"Preview not found.")
+    return FileResponse(p,media_type=mime,filename=filename,headers={"Cache-Control":"private, no-store","X-Robots-Tag":"noindex, nofollow"})
