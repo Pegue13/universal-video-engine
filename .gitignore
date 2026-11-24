@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+*.mp4
+*.webm
+*.zip
+*.jpg
+*.png
+work/
