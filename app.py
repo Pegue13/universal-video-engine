@@ -206,3 +206,16 @@ def example_dj_pack():
     if not p.is_file():
         raise HTTPException(404,"Example pack not available.")
     return FileResponse(p,media_type="application/zip",filename="DJ_QBert_Source_Clips_CC_BY_3.zip")
+
+
+@app.get("/examples/dj-liek-reel.mp4",include_in_schema=False)
+def dj_liek_video():
+    p=Path("/app/examples/dj-liek-reel.mp4")
+    if not p.is_file(): raise HTTPException(404,"Verified example not available.")
+    return FileResponse(p,media_type="video/mp4",filename="DJ_Liek_Reel_CC_BY_SA_4.mp4")
+
+@app.get("/examples/dj-liek-reel.zip",include_in_schema=False)
+def dj_liek_bundle():
+    p=Path("/app/examples/dj-liek-reel.zip")
+    if not p.is_file(): raise HTTPException(404,"Verified example not available.")
+    return FileResponse(p,media_type="application/zip",filename="DJ_Liek_Reel_CC_BY_SA_4.zip")
