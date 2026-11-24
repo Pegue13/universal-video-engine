@@ -19,14 +19,14 @@ Image.MAX_IMAGE_PIXELS = 16_000_000
 class EngineError(ValueError):
     pass
 
-def run(args, timeout=90):
+def run(args, timeout=90, accepted_exit_codes=(0,)):
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/tmp", "LANG": "C.UTF-8"}
     try:
         p = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE, timeout=timeout, env=env, check=False)
     except subprocess.TimeoutExpired:
         raise EngineError("Media processing timed out.")
-    if p.returncode:
+    if p.returncode not in accepted_exit_codes:
         raise EngineError("Media processing failed: " + p.stderr.decode("utf-8", "replace")[-650:])
     return p.stdout
 
