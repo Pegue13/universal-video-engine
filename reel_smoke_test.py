@@ -15,7 +15,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         if not cdn_allowed(newurl): raise ValueError("Unapproved redirect host")
         return super().redirect_request(req,fp,code,msg,headers,newurl)
 def main():
-    report("started",artist="Fran DC",source=URL)
+    report("started",source=URL)
     try:
         p=subprocess.run(["yt-dlp","--ignore-config","--no-cache-dir","--no-playlist",
             "--socket-timeout","12","--retries","0","--skip-download","--dump-single-json","--",URL],
@@ -49,4 +49,51 @@ def main():
         report("timeout")
     except Exception as e:
         report("diagnostic_error",error=type(e).__name__)
-if __name__=="__main__": main()
+
+def profile_probe():
+    import re, html, concurrent.futures
+    profiles=[("Fran DC","https://www.instagram.com/frandc/reels/"),("Horacio Cruz","https://www.instagram.com/horaciocruzoficial/reels/")]
+    def fetch(entry):
+        artist,url=entry
+        try:
+            p=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(p,timeout=12) as r:
+                body=html.unescape(r.read(2_000_000).decode("utf-8","replace")).replace("\\/","/")
+                links=list(dict.fromkeys(re.findall(r'(?:https://www\.instagram\.com)?/reel/([A-Za-z0-9_-]{8,16})/',body)))
+                report("profile_checked",artist=artist,http=r.status,public_reel_links=len(links),login_required="/accounts/login" in r.url)
+                return artist,links[:2]
+        except Exception as e:
+            report("profile_unavailable",artist=artist,error=type(e).__name__)
+            return artist,[]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        out=list(pool.map(fetch,profiles))
+    for artist,links in out:
+        for code in links:
+            global URL
+            URL="https://www.instagram.com/reel/"+code+"/"
+            report("public_profile_candidate",artist=artist,source=URL)
+            main()
+
+def producer_probe():
+    import re,html
+    page="https://currogo.com/dj-fran-dc/"
+    try:
+        request=urllib.request.Request(page,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(request,timeout=12) as response:
+            body=html.unescape(response.read(2_000_000).decode("utf-8","replace")).replace("\\/","/")
+        urls=list(dict.fromkeys(re.findall(r'https://(?:www\.)?currogo\.com/[^"\'\s<>]+?\.mp4(?:\?[^"\'\s<>]*)?',body,re.I)))
+        report("producer_page_checked",artist="Fran DC",direct_mp4_links=len(urls))
+        for url in urls[:1]:
+            request=urllib.request.Request(url,headers={"Range":"bytes=0-65535","User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(request,timeout=15) as response:
+                if urllib.parse.urlsplit(response.url).hostname not in ("currogo.com","www.currogo.com"):
+                    report("producer_redirect_rejected")
+                    return
+                b=response.read(65536)
+                report("producer_transport_verified",artist="Fran DC",http=response.status,bytes=len(b),mp4_signature=len(b)>=8 and b[4:8]==b"ftyp",content_type=response.headers.get("Content-Type"),full_file_saved=False)
+    except Exception as e:
+        report("producer_probe_failed",error=type(e).__name__)
+if __name__=="__main__":
+    profile_probe()
+    producer_probe()
+
