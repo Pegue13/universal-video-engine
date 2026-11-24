@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: universal-video-engine
+    runtime: docker
+    plan: free
+    region: frankfurt
+    autoDeployTrigger: off
+    healthCheckPath: /health
+    envVars:
+      - key: VIDEO_ENGINE_API_KEY
+        generateValue: true
+      - key: ENABLE_INSTAGRAM
+        value: "true"
