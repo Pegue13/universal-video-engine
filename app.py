@@ -15,8 +15,9 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 import engine
+import media_import
 
-app=FastAPI(title="Universal Video Engine",version="0.1.0",
+app=FastAPI(title="Universal Video Engine",version="0.2.0",
     description="Independent video editing with explicit media permissions.")
 busy=threading.Lock()
 MAX_REQUEST=engine.MAX_TOTAL_BYTES+2*1024*1024
@@ -46,7 +47,7 @@ async def guard(request:Request,call_next):
 @app.get("/health")
 def health():
     ready=bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
-    return JSONResponse({"service":"Universal Video Engine","version":"0.1.0",
+    return JSONResponse({"service":"Universal Video Engine","version":"0.2.0",
         "ready":ready,"auth_configured":len(API_KEY)>=24,
         "instagram_enabled":os.getenv("ENABLE_INSTAGRAM","false")=="true",
         "max_clips":engine.MAX_CLIPS,"max_duration_seconds":engine.MAX_DURATION},status_code=200 if ready else 503)
@@ -118,9 +119,9 @@ def canonical_reel(url):
     p=urlsplit(url)
     if p.scheme!="https" or p.netloc.lower() not in ("instagram.com","www.instagram.com") or p.fragment:
         raise engine.EngineError("Only HTTPS Instagram public Reel links are supported.")
-    match=re.fullmatch(r"/reel/([A-Za-z0-9_-]{5,40})/?",p.path)
+    match=re.fullmatch(r"/(reel|reels|p|tv)/([A-Za-z0-9_-]{5,40})/?",p.path)
     if not match: raise engine.EngineError("Use a direct Instagram Reel URL.")
-    return "https://www.instagram.com/reel/"+match.group(1)+"/"
+    return "https://www.instagram.com/"+("reel" if match.group(1)=="reels" else match.group(1))+"/"+match.group(2)+"/"
 
 @app.post("/v1/import/instagram",responses={200:{"content":{"video/mp4":{}}}})
 def import_reel(req:ReelRequest):
@@ -144,4 +145,54 @@ def import_reel(req:ReelRequest):
         return FileResponse(p,media_type="video/mp4",filename="instagram-reel.mp4",
             background=BackgroundTask(shutil.rmtree,work,ignore_errors=True),
             headers={"Cache-Control":"no-store","X-Source-SHA256":engine.digest(p)})
+    except Exception as e: fail(work,e)
+
+
+class DirectRequest(BaseModel):
+    url:str=Field(max_length=4096)
+    download_authorized:bool=False
+    usage_authorized:bool=False
+    permission_reference:str=Field(default="",max_length=400)
+
+@app.post("/v1/import/direct")
+def import_direct(req:DirectRequest):
+    if not(req.download_authorized and req.usage_authorized and req.permission_reference.strip()):
+        raise HTTPException(422,"Both permissions and a reference are required.")
+    work=Path(tempfile.mkdtemp(prefix="uve-direct-"))
+    try:
+        p=work/"source.bin"
+        info=media_import.fetch(req.url,p)
+        ext="mp4" if engine.media_format(p)=="mov" else "webm"
+        return FileResponse(p,media_type="video/"+ext,filename="imported."+ext,
+            background=BackgroundTask(shutil.rmtree,work,ignore_errors=True),
+            headers={"Cache-Control":"no-store","X-Source-SHA256":engine.digest(p)})
+    except Exception as e: fail(work,e)
+
+class DirectRenderRequest(BaseModel):
+    sources:list[DirectRequest]=Field(min_length=1,max_length=6)
+    spec:dict
+
+@app.post("/v1/render/direct",responses={200:{"content":{"application/zip":{}}}})
+def direct_render(req:DirectRenderRequest):
+    work=Path(tempfile.mkdtemp(prefix="uve-direct-render-"))
+    try:
+        if len(json.dumps(req.spec))>24000: raise engine.EngineError("Edit specification too large.")
+        paths=[]
+        total=0
+        for i,s in enumerate(req.sources):
+            if not(s.download_authorized and s.usage_authorized and s.permission_reference.strip()):
+                raise engine.EngineError("Every source requires both permissions and a reference.")
+            p=work/f"source{i}.bin"
+            left=min(engine.MAX_ASSET_BYTES,engine.MAX_TOTAL_BYTES-total)
+            if left<1: raise engine.EngineError("Combined media limit exceeded.")
+            media_import.fetch(s.url,p,left)
+            total+=p.stat().st_size
+            paths.append(p)
+        edit=dict(req.spec)
+        edit["usage_authorized"]=True
+        edit["permission_reference"]="; ".join(s.permission_reference for s in req.sources)[:400]
+        bundle,qa=engine.render(work,paths,edit)
+        return FileResponse(bundle,media_type="application/zip",filename="universal-video-delivery.zip",
+            background=BackgroundTask(shutil.rmtree,work,ignore_errors=True),
+            headers={"Cache-Control":"no-store","X-Video-SHA256":qa["sha256"]})
     except Exception as e: fail(work,e)
