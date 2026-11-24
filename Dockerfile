@@ -14,7 +14,10 @@ COPY build_mara_documentary.py app_mara.py ./
 RUN python build_mara_documentary.py
 COPY build_mara_voice.py app_voice.py ./
 RUN (pip install --no-cache-dir 'piper-tts>=1.3,<2' && python -m piper.download_voices es_ES-sharvard-medium && python build_mara_voice.py) || echo 'MARA_VOICE_BUILD_FAILED; preserving silent version'
+COPY build_mara_dora.py app_dora.py ./
+RUN (pip install --no-cache-dir "kokoro-onnx>=0.4.9,<0.7" && python build_mara_dora.py) || echo "MARA_DORA_BUILD_FAILED; preserving previous versions"
+RUN rm -f /tmp/kokoro-v1.0.onnx /tmp/voices-v1.0.bin
 RUN useradd --create-home --uid 10001 engine
 USER engine
 EXPOSE 10000
-CMD ["sh","-c","exec uvicorn app_voice:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
+CMD ["sh","-c","exec uvicorn app_dora:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
