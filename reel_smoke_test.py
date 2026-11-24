@@ -25,7 +25,8 @@ def category(text):
 def main():
     try:
         result("started",source="NASA Earth public Reel",url=URL)
-        p=run(BASE+["--skip-download","--dump-single-json","--",URL],40)
+        metadata_args=[arg for i,arg in enumerate(BASE) if i not in (BASE.index("--max-downloads"),BASE.index("--max-downloads")+1)]
+        p=run(metadata_args+["--skip-download","--dump-single-json","--",URL],40)
         if p.returncode:
             result("metadata_failed",category=category(p.stderr),exit_code=p.returncode,
                    error=p.stderr[-600:])
@@ -36,7 +37,7 @@ def main():
             return
         owner=str(m.get("uploader_id") or m.get("channel_id") or m.get("uploader") or "").lower().replace(" ","")
         formats=m.get("formats") or []
-        result("metadata_resolved",id=m.get("id"),uploader=owner,formats=len(formats),duration=m.get("duration"))
+        result("metadata_resolved",id=m.get("id"),uploader=owner,formats=len(formats),duration=m.get("duration"),video_only_formats=sum(1 for f in formats if f.get("acodec")=="none" and f.get("vcodec") not in (None,"none")))
         # The sample's source is documented, but third-party sound is not cleared.
         # Only request a genuinely video-only stream, with confirmed NASA Earth attribution.
         if owner.lstrip("@") not in ("nasaearth","nasa_earth"):
@@ -49,7 +50,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="reel-smoke-") as d:
             path=pathlib.Path(d)/"reel.mp4"
             p=run(BASE+["--format","bestvideo[ext=mp4][height<=720]","--output",str(path),"--",URL],70)
-            if p.returncode or not path.is_file():
+            if p.returncode not in (0,101) or not path.is_file():
                 result("download_failed",category=category(p.stderr),exit_code=p.returncode,error=p.stderr[-600:])
                 return
             if path.stat().st_size>32*1024*1024:
