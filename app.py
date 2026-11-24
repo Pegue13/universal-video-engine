@@ -233,3 +233,17 @@ def private_preview(token:str,filename:str):
     p=root/name
     if not p.is_file():raise HTTPException(404,"Preview not found.")
     return FileResponse(p,media_type=mime,filename=filename,headers={"Cache-Control":"private, no-store","X-Robots-Tag":"noindex, nofollow"})
+
+
+@app.get("/private-documentary/{token}/{filename}",include_in_schema=False)
+def private_documentary(token:str,filename:str):
+    root=Path("/app/examples")
+    key=root/"henners-doc.token"
+    if not key.is_file() or len(token)>128 or not secrets.compare_digest(token,key.read_text().strip()):
+        raise HTTPException(404,"Preview not found.")
+    names={"video.mp4":("henners-doc.mp4","video/mp4","HENNERS_Documental_Textos.mp4"),"delivery.zip":("henners-doc.zip","application/zip","HENNERS_Documental_Pack.zip"),"contact.jpg":("henners-doc-contact.jpg","image/jpeg","Contacto.jpg")}
+    if filename not in names: raise HTTPException(404,"Preview not found.")
+    name,mime,download=names[filename]
+    p=root/name
+    if not p.is_file():raise HTTPException(404,"Preview not found.")
+    return FileResponse(p,media_type=mime,filename=download,headers={"Cache-Control":"private, no-store","X-Robots-Tag":"noindex, nofollow"})
