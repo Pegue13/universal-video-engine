@@ -8,6 +8,8 @@ COPY app.py engine.py media_import.py selftest.py reel_smoke_test.py build_dj_sa
 RUN python -m compileall -q /app && python selftest.py
 RUN python reel_smoke_test.py
 RUN python build_dj_sample.py
+COPY build_henners_documentary.py ./
+RUN python build_henners_documentary.py
 RUN useradd --create-home --uid 10001 engine
 USER engine
 EXPOSE 10000
