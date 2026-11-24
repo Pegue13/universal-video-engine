@@ -4,8 +4,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-de
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py engine.py selftest.py ./
+COPY app.py engine.py selftest.py reel_smoke_test.py ./
 RUN python -m compileall -q /app && python selftest.py
+RUN python reel_smoke_test.py
 RUN useradd --create-home --uid 10001 engine
 USER engine
 EXPOSE 10000
