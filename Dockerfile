@@ -12,7 +12,9 @@ COPY build_henners_documentary.py ./
 RUN python build_henners_documentary.py
 COPY build_mara_documentary.py app_mara.py ./
 RUN python build_mara_documentary.py
+COPY build_mara_voice.py app_voice.py ./
+RUN (pip install --no-cache-dir 'piper-tts>=1.3,<2' && python -m piper.download_voices es_ES-sharvard-medium && python build_mara_voice.py) || echo 'MARA_VOICE_BUILD_FAILED; preserving silent version'
 RUN useradd --create-home --uid 10001 engine
 USER engine
 EXPOSE 10000
-CMD ["sh","-c","exec uvicorn app_mara:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
+CMD ["sh","-c","exec uvicorn app_voice:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
