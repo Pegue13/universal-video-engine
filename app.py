@@ -196,3 +196,13 @@ def direct_render(req:DirectRenderRequest):
             background=BackgroundTask(shutil.rmtree,work,ignore_errors=True),
             headers={"Cache-Control":"no-store","X-Video-SHA256":qa["sha256"]})
     except Exception as e: fail(work,e)
+
+
+@app.get("/examples/dj-qbert-source-clips.zip",include_in_schema=False)
+def example_dj_pack():
+    # This single immutable asset contains only publicly licensed material.
+    # No user uploads, directory listing, parameters, or API credentials are exposed.
+    p=Path("/app/examples/dj-qbert-source-clips.zip")
+    if not p.is_file():
+        raise HTTPException(404,"Example pack not available.")
+    return FileResponse(p,media_type="application/zip",filename="DJ_QBert_Source_Clips_CC_BY_3.zip")
