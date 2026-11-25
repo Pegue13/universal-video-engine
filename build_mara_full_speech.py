@@ -8,20 +8,23 @@ def request(url,data=None,timeout=60):
  if not url.startswith(BASE+"/"):raise ValueError("Unexpected host")
  req=urllib.request.Request(url,data=None if data is None else json.dumps(data).encode(),headers={"Content-Type":"application/json","User-Agent":"UniversalVideoEngine/1.0"})
  return urllib.request.urlopen(req,timeout=timeout)
-def generate(script,ref):
+def generate(script,ref,existing_url=None):
  assert len(script)<=300
- with request(BASE+"/gradio_api/call/generate_tts_audio",{"data":[script,ref,0.64,0.83,271,0.35]},20) as r:
-  event=json.load(r)["event_id"]
- with request(BASE+"/gradio_api/call/generate_tts_audio/"+event,timeout=90) as r:
-  kind=None;deadline=time.monotonic()+150
-  for line in r:
-   if time.monotonic()>deadline:raise TimeoutError("Generation deadline")
-   s=line.decode().strip()
-   if s.startswith("event:"):kind=s[6:].strip()
-   elif s.startswith("data:") and kind=="complete":
-    url=json.loads(s[5:].strip())[0]["url"];break
-   elif s.startswith("data:") and kind=="error":raise RuntimeError("Public demo generation failed: "+s[:200])
-  else:raise RuntimeError("No completed output")
+ if existing_url:
+  url=existing_url
+ else:
+  with request(BASE+"/gradio_api/call/generate_tts_audio",{"data":[script,ref,0.64,0.83,271,0.35]},20) as r:
+   event=json.load(r)["event_id"]
+  with request(BASE+"/gradio_api/call/generate_tts_audio/"+event,timeout=90) as r:
+   kind=None;deadline=time.monotonic()+150
+   for line in r:
+    if time.monotonic()>deadline:raise TimeoutError("Generation deadline")
+    s=line.decode().strip()
+    if s.startswith("event:"):kind=s[6:].strip()
+    elif s.startswith("data:") and kind=="complete":
+     url=json.loads(s[5:].strip())[0]["url"];break
+    elif s.startswith("data:") and kind=="error":raise RuntimeError("Public demo generation failed: "+s[:200])
+   else:raise RuntimeError("No completed output")
  with request(url,timeout=20) as r:b=r.read(6000001)
  if len(b)>6000000:raise ValueError("Audio too large")
  with wave.open(io.BytesIO(b)) as w:
@@ -40,12 +43,21 @@ def main():
  parts=[];timing=[];cursor=0.0
  pauses=[0.42,0.48,0.53,0.40,0.46,0.62,0.0]
  for i,script in enumerate(BLOCKS):
-  pcm,duration=generate(script,ref)
+  existing=BASE+"/gradio_api/file=/tmp/gradio/b4a6d266a00d3936189e07b7a82c8eb54ab5ec4c34c014446fe5640cbe2f780f/audio.wav" if i==0 else None
+  try:
+   pcm,duration=generate(script,ref,existing)
+  except Exception as e:
+   log("stopped",block=i+1,reason=str(e)[:300]);break
+  clip=ROOT/("mara-full-block-%02d.wav"%(i+1))
+  with wave.open(str(clip),"wb") as w:
+   w.setnchannels(1);w.setsampwidth(2);w.setframerate(24000);w.writeframes(pcm)
   parts.append(pcm);timing.append({"block":i+1,"start":round(cursor,3),"end":round(cursor+duration,3),"text":script})
   cursor+=duration
   silence=b"\0\0"*round(24000*pauses[i]);parts.append(silence);cursor+=pauses[i]
   log("block",number=i+1,total=len(BLOCKS),seconds=round(duration,2))
-  if i+1<len(BLOCKS):time.sleep(1)
+  if i+1<len(BLOCKS):time.sleep(4)
+ if not timing:raise RuntimeError("No usable audio")
+ complete=len(timing)==len(BLOCKS)
  wav=ROOT/"mara-full-speech.wav"
  with wave.open(str(wav),"wb") as w:
   w.setnchannels(1);w.setsampwidth(2);w.setframerate(24000);w.writeframes(b"".join(parts))
@@ -53,11 +65,11 @@ def main():
  subprocess.run(["ffmpeg","-v","error","-y","-i",str(wav),"-af","loudnorm=I=-16:TP=-1.5:LRA=11","-ar","48000","-c:a","libmp3lame","-b:a","128k",str(mp3)],check=True,timeout=60)
  subprocess.run(["ffmpeg","-v","error","-i",str(mp3),"-f","null","-"],check=True,timeout=60)
  with wave.open(str(wav)) as w:duration=w.getnframes()/w.getframerate()
- assert len(timing)==len(BLOCKS) and abs(duration-cursor)<0.02
+ assert abs(duration-cursor)<0.02
  token=secrets.token_urlsafe(24)
  (ROOT/"mara-full-speech.token").write_text(token)
  (ROOT/"mara-full-speech.json").write_text(json.dumps(timing,ensure_ascii=False,indent=2),encoding="utf-8")
- log("verified",duration=round(duration,2),blocks=len(timing),mp3_bytes=mp3.stat().st_size,wav_bytes=wav.stat().st_size,sha256=hashlib.sha256(mp3.read_bytes()).hexdigest(),path="/private-full-speech/"+token+"/listen",mp3="/private-full-speech/"+token+"/speech.mp3",wav="/private-full-speech/"+token+"/speech.wav")
+ log("verified" if complete else "partial",duration=round(duration,2),blocks=len(timing),mp3_bytes=mp3.stat().st_size,wav_bytes=wav.stat().st_size,sha256=hashlib.sha256(mp3.read_bytes()).hexdigest(),path="/private-full-speech/"+token+"/listen",mp3="/private-full-speech/"+token+"/speech.mp3",wav="/private-full-speech/"+token+"/speech.wav")
 if __name__=="__main__":
  try:main()
  except Exception as e:log("failed",reason=str(e)[:500]);raise
