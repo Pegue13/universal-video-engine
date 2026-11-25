@@ -19,7 +19,9 @@ RUN (pip install --no-cache-dir "kokoro-onnx>=0.4.9,<0.7" && python build_mara_d
 RUN rm -f /tmp/kokoro-v1.0.onnx /tmp/voices-v1.0.bin
 COPY build_voice_audition.py app_audition.py ./
 RUN (pip install --no-cache-dir edge-tts && python build_voice_audition.py) || echo 'VOICE_AUDITION_FAILED'
+COPY build_mara_full_speech.py app_full_speech.py ./
+RUN python build_mara_full_speech.py || echo 'MARA_FULL_SPEECH_FAILED; preserving previous exports'
 RUN useradd --create-home --uid 10001 engine
 USER engine
 EXPOSE 10000
-CMD ["sh","-c","exec uvicorn app_audition:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
+CMD ["sh","-c","exec uvicorn app_full_speech:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
